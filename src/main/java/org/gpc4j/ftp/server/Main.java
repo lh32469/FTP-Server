@@ -18,17 +18,16 @@ public class Main {
 
 
     public static void main(String[] args) throws IOException {
-        
+
         String portNumber = System.getProperty("PORT", "8005");
-        
-          Path ftpDir
+
+        Path ftpDir
                 = Paths.get(System.getProperty("FTP_DIR", "/var/tmp/ftp"));
 
-        
         int port = Integer.parseInt(portNumber);
 
-        LOG.info("FTP Server started at port: " + port+ 
-                ", using direcory: " + ftpDir);
+        LOG.info("FTP Server started at port: " + port
+                + ", using direcory: " + ftpDir);
 
         ServerSocket server = new ServerSocket(port);
 
