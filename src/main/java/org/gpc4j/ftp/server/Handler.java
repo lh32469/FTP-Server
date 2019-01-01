@@ -10,6 +10,7 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
@@ -181,6 +182,7 @@ public class Handler implements Runnable {
                     LocalDate now = LocalDate.now(); // 2016-06-17 
 
                     Path dir = ftpDir.resolve(now.toString().replaceAll("-", "/"));
+                    Files.createDirectory(dir);
 
                     FileOutputStream oStream
                             = new FileOutputStream(dir.resolve(file).toString());
