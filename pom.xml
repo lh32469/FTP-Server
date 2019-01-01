@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <groupId>oracle.ocm.utils</groupId>
+    <groupId>org.gpc4j.ftp</groupId>
     <artifactId>FTP-Server</artifactId>
     <version>1.0</version>
     <packaging>jar</packaging>
@@ -10,7 +10,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <main.class>oracle.ocm.utils.ftp.server.Main</main.class>
+        <main.class>org.gpc4j.ftp.server.Main</main.class>
     </properties>
     
     <build>
@@ -38,3 +38,4 @@
         </plugins>
     </build>
 </project>
+
