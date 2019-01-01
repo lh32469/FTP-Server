@@ -12,12 +12,12 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 
 /**
  * Class for handling FTP client.
@@ -69,7 +69,6 @@ public class Handler implements Runnable {
 
     private static final Logger LOG = Logger.getLogger(Handler.class.getName());
 
-
     /**
      * Create Handler associate with the socket provided.
      *
@@ -94,7 +93,6 @@ public class Handler implements Runnable {
         commandResponses.put("PASS", "230 User logged in");
 
     }
-
 
     @Override
     public void run() {
@@ -180,9 +178,12 @@ public class Handler implements Runnable {
                     InputStream iStream
                             = client.getInputStream();
 
+                    LocalDate now = LocalDate.now(); // 2016-06-17 
+
+                    Path dir = ftpDir.resolve(now.toString().replaceAll("-", "/"));
+
                     FileOutputStream oStream
-                            = new FileOutputStream(
-                                    ftpDir.resolve(file).toString());
+                            = new FileOutputStream(dir.resolve(file).toString());
 
                     writer.println("150 Ok to send data.");
                     int count = iStream.read(buff);
@@ -229,6 +230,5 @@ public class Handler implements Runnable {
 
         LOG.info(this + " ended.");
     }
-
 
 }
