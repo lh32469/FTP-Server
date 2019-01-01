@@ -182,7 +182,7 @@ public class Handler implements Runnable {
                     LocalDate now = LocalDate.now(); // 2016-06-17 
 
                     Path dir = ftpDir.resolve(now.toString().replaceAll("-", "/"));
-                    Files.createDirectory(dir);
+                    Files.createDirectories(dir);
 
                     FileOutputStream oStream
                             = new FileOutputStream(dir.resolve(file).toString());
