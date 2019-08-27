@@ -13,8 +13,10 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.logging.Level;
@@ -27,210 +29,242 @@ import java.util.logging.Logger;
  */
 public class Handler implements Runnable {
 
-    /**
-     * Reader for reading client commands.
-     */
-    private final BufferedReader reader;
+  /**
+   * Reader for reading client commands.
+   */
+  private final BufferedReader reader;
 
-    /**
-     * Writer for writing responses to client.
-     */
-    private final PrintWriter writer;
+  /**
+   * Writer for writing responses to client.
+   */
+  private final PrintWriter writer;
 
-    /**
-     * Map of simple received commands and their responses.
-     */
-    private final Map<String, String> commandResponses;
+  /**
+   * Map of simple received commands and their responses.
+   */
+  private final Map<String, String> commandResponses;
 
-    /**
-     * The IP address of the client. Set via the PORT command.
-     */
-    private String clientIP;
+  /**
+   * The IP address of the client. Set via the PORT command.
+   */
+  private String clientIP;
 
-    /**
-     * The receiving dataport of the client. Set via the PORT command.
-     */
-    private int dataPort;
+  /**
+   * The receiving dataport of the client. Set via the PORT command.
+   */
+  private int dataPort;
 
-    /**
-     * FTP User login.
-     */
-    private String user = "";
+  /**
+   * Where to store files on local file system.
+   */
+  final Path ftpDir;
 
-    /**
-     * FTP User password.
-     */
-    private String pass = "";
+  /**
+   * FTP User login and top-level dir under ftpDir to store files in.
+   */
+  private String user = "";
 
-    private long size;
+  /**
+   * FTP User password.
+   */
+  private String pass = "";
 
-    private ServerSocket uploadSocket;
+  /**
+   * The current directory based on client CWD commands.
+   */
+  private String currentDirectory = "/";
 
-    private final Socket socket;
+  private long size;
 
-    private static final Logger LOG = Logger.getLogger(Handler.class.getName());
+  private ServerSocket uploadSocket;
 
-    /**
-     * Create Handler associate with the socket provided.
-     *
-     * @param socket Socket to listen for commands on and provide responses.
-     *
-     * @throws IOException
-     */
-    public Handler(Socket socket) throws IOException {
+  private final Socket socket;
 
-        this.socket = socket;
+  private static final Logger LOG = Logger.getLogger(Handler.class.getName());
 
-        InputStream iStream = socket.getInputStream();
-        InputStreamReader iStreamReader = new InputStreamReader(iStream);
-        reader = new BufferedReader(iStreamReader);
+  /**
+   * Create Handler associate with the socket provided.
+   *
+   * @param socket Socket to listen for commands on and provide responses.
+   *
+   * @throws IOException
+   */
+  public Handler(Socket socket) throws IOException {
 
-        OutputStream oStream = socket.getOutputStream();
-        OutputStreamWriter oStreamWriter = new OutputStreamWriter(oStream);
-        writer = new PrintWriter(oStreamWriter, true);
+    this.socket = socket;
 
-        commandResponses = new HashMap<>();
-        commandResponses.put("USER", "331 Password required for User.");
-        commandResponses.put("PASS", "230 User logged in");
+    InputStream iStream = socket.getInputStream();
+    InputStreamReader iStreamReader = new InputStreamReader(iStream);
+    reader = new BufferedReader(iStreamReader);
 
-    }
+    OutputStream oStream = socket.getOutputStream();
+    OutputStreamWriter oStreamWriter = new OutputStreamWriter(oStream);
+    writer = new PrintWriter(oStreamWriter, true);
 
-    @Override
-    public void run() {
+    commandResponses = new HashMap<>();
+    commandResponses.put("USER", "331 Password required for User.");
+    commandResponses.put("PASS", "230 User logged in");
 
-        final String ready = "220 Ftp Server Ready";
+    ftpDir = Paths.get(System.getProperty("FTP_DIR", "/var/tmp/ftp"));
+  }
 
-        Path ftpDir
-                = Paths.get(System.getProperty("FTP_DIR", "/var/tmp/ftp"));
+  @Override
+  public void run() {
 
-        try {
+    final String ready = "220 Ftp Server Ready";
 
-            writer.println(ready);
-            LOG.info(ready);
+    try {
 
-            String line;
-            String response;
+      writer.println(ready);
+      LOG.info(ready);
 
-            while ((line = reader.readLine()) != null) {
+      String line;
+      String response;
 
-                Scanner scan = new Scanner(line);
+      main:
+      while ((line = reader.readLine()) != null) {
 
-                String command = scan.next();
-                LOG.info("line = " + line);
+        Scanner scan = new Scanner(line);
 
-                if ("PORT".equals(command)) {
+        String command = scan.next();
+        LOG.info("line = " + line);
 
-                    String array[] = line.split(" ");
-                    array = array[1].split(",");
+        switch (command) {
 
-                    clientIP = array[0] + "." + array[1] + "."
-                            + array[2] + "." + array[3];
+          case "PWD":
+            writer.println("257 \"" + currentDirectory
+                + "\" is the current directory");
+            break;
 
-                    int high = Integer.parseInt(array[4]);
-                    int low = Integer.parseInt(array[5]);
-                    dataPort = (high << 8) | low;
-                    writer.println("200 Port command successful");
+          case "CWD":
+            String dir = scan.next().trim();
+            currentDirectory = dir;
+            LOG.info("CurrentDir: " + currentDirectory);
+            writer.println("250 Directory successfully changed.");
+            break;
 
-                } else if ("USER".equals(command)) {
+          case "TYPE":
+            String type = scan.next().trim();
+            LOG.config("Type = [" + type + "]");
+            if (type.equals("I")) {
+              writer.println("200 Switching to Binary mode.");
+            }
+            break;
 
-                    String array[] = line.split(" ");
-                    user = array[1].trim();
-                    LOG.info("User = " + user);
+          case "PORT":
+            String array[] = line.split(" ");
+            array = array[1].split(",");
 
-                    writer.println(commandResponses.get(command));
+            clientIP = array[0] + "." + array[1] + "."
+                + array[2] + "." + array[3];
 
-                } else if ("SIZE".equals(command)) {
+            int high = Integer.parseInt(array[4]);
+            int low = Integer.parseInt(array[5]);
+            dataPort = (high << 8) | low;
+            writer.println("200 Port command successful");
+            break;
 
-                    LOG.info("Size = " + size);
-                    writer.println("213 " + size);
+          case "USER":
+            user = line.split(" ")[1].trim();
+            LOG.info("User = " + user);
+            writer.println(commandResponses.get(command));
+            break;
 
-                } else if ("TYPE".equals(command)) {
+          case "SIZE":
+            LOG.info("Size = " + size);
+            writer.println("213 " + size);
+            break;
 
-                    if (scan.next().equals("I")) {
-                        writer.println("200 Switching to Binary mode.");
-                    }
+          case "STOR":
+            handleStoreCommand(scan);
+            break;
 
-                } else if ("EPSV".equals(command)) {
+          case "EPSV":
+            uploadSocket = new ServerSocket(0);
+            LOG.info("Opening port: " + uploadSocket.getLocalPort()
+                + " for uploading");
+            writer.println("229 Entering Extended Passive Mode"
+                + " (|||" + uploadSocket.getLocalPort() + "|)");
+            break;
 
-                    uploadSocket = new ServerSocket(0);
+          case "RETR":
+            writer.println("150 Opening data connection");
+            Socket client = new Socket(clientIP, dataPort);
+            OutputStream oStream = client.getOutputStream();
+            oStream.close();
+            writer.println("226 Transfer complete");
+            break;
 
-                    LOG.info("Opening port: " + uploadSocket.getLocalPort()
-                            + " for uploading");
+          case "QUIT":
+            writer.println("221 Goodbye.");
+            socket.close();
+            // Break out of main labeled loop
+            break main;
 
-                    writer.println("229 Entering Extended Passive Mode"
-                            + " (|||" + uploadSocket.getLocalPort() + "|)");
-
-                } else if ("STOR".equals(command)) {
-
-                    String file = scan.next();
-
-                    byte[] buff = new byte[8192];
-                    Socket client = null;
-
-                    if (uploadSocket == null) {
-                        // Via PORT Connection
-                        writer.println("150 Opening data connection");
-                        client = new Socket(clientIP, dataPort);
-                    } else {
-                        // Via EPSV Connection
-                        client = uploadSocket.accept();
-                    }
-
-                    InputStream iStream
-                            = client.getInputStream();
-
-                    LocalDate now = LocalDate.now(); // 2016-06-17 
-
-                    Path dir = ftpDir.resolve(now.toString().replaceAll("-", "/"));
-                    Files.createDirectories(dir);
-
-                    FileOutputStream oStream
-                            = new FileOutputStream(dir.resolve(file).toString());
-
-                    writer.println("150 Ok to send data.");
-                    int count = iStream.read(buff);
-
-                    while (count > 0) {
-                        oStream.write(buff, 0, count);
-                        count = iStream.read(buff);
-                    }
-                    oStream.close();
-
-                    if (uploadSocket != null) {
-                        uploadSocket.close();
-                    }
-
-                    client.close();
-
-                    LOG.info("Stored " + file);
-                    writer.println("226 Transfer complete.");
-
-                } else if ("RETR".equals(command)) {
-
-                    writer.println("150 Opening data connection");
-                    Socket client = new Socket(clientIP, dataPort);
-                    OutputStream oStream = client.getOutputStream();
-
-                    oStream.close();
-                    writer.println("226 Transfer complete");
-
-                } else if ("QUIT".equals(command)) {
-                    writer.println("221 Goodbye.");
-                    socket.close();
-                    break;
-                } else if ((response = commandResponses.get(command)) != null) {
-                    writer.println(response);
-                } else {
-                    writer.println(ready);
-                }
-
+          default:
+            if ((response = commandResponses.get(command)) != null) {
+              writer.println(response);
+            } else {
+              writer.println(ready);
             }
 
-        } catch (IOException ex) {
-            LOG.log(Level.SEVERE, null, ex);
         }
+      }
 
-        LOG.info(this + " ended.");
+    } catch (IOException ex) {
+      LOG.log(Level.SEVERE, null, ex);
     }
+
+    LOG.info(this + " ended.");
+  }
+
+  void handleStoreCommand(final Scanner scan) throws IOException {
+    String file = scan.next();
+
+    byte[] buff = new byte[8192];
+    Socket client = null;
+
+    if (uploadSocket == null) {
+      // Via PORT Connection
+      writer.println("150 Opening data connection");
+      LOG.info("Connecting to ClientIP:Port: " + clientIP + ":" + dataPort);
+      client = new Socket(clientIP, dataPort);
+    } else {
+      // Via EPSV Connection
+      client = uploadSocket.accept();
+    }
+
+    InputStream iStream
+        = client.getInputStream();
+
+    LocalDate now = LocalDate.now(); // 2016-06-17 
+
+    // Store files by date under ftpDir using user id as top-level dir.
+    Path dir = ftpDir.resolve(user);
+
+    dir = dir.resolve(now.toString().replaceAll("-", "/"));
+    Files.createDirectories(dir);
+
+    FileOutputStream oStream
+        = new FileOutputStream(dir.resolve(file).toString());
+
+    writer.println("150 Ok to send data.");
+    int count = iStream.read(buff);
+
+    while (count > 0) {
+      oStream.write(buff, 0, count);
+      count = iStream.read(buff);
+    }
+    oStream.close();
+
+    if (uploadSocket != null) {
+      uploadSocket.close();
+    }
+
+    client.close();
+
+    LOG.info("Stored " + file);
+    writer.println("226 Transfer complete.");
+  }
 
 }
